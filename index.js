@@ -4,8 +4,10 @@ import {
   REST,
   Routes,
   SlashCommandBuilder,
+  AttachmentBuilder,
 } from "discord.js";
 import "dotenv/config";
+import { generateReportImage } from "./generateImage.js";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -126,15 +128,16 @@ async function fetchAllMonthMessages(channel, targetMonth, targetYear) {
 // ─── Report builder ───────────────────────────────────────────────────────────
 
 function buildReport(activities, targetMonth, targetYear) {
-  const monthName = new Date(targetYear, targetMonth - 1, 1).toLocaleString("en-US", {
-    month: "long",
-  });
+  const monthName   = new Date(targetYear, targetMonth - 1, 1).toLocaleString("en-US", { month: "long" });
+  const periodStart = new Date(Date.UTC(targetYear, targetMonth - 2, 27));
+  const periodEnd   = new Date(Date.UTC(targetYear, targetMonth - 1, 26));
+  const fmt         = (d) => `${d.getUTCDate()}/${d.getUTCMonth() + 1}/${targetYear}`;
 
   let totalEvents = 0;
   let totalJbs    = 0;
   const allCounts = [];
 
-  const weeks = {
+  const weekBuckets = {
     1: { events: 0, jbs: 0, counts: [] },
     2: { events: 0, jbs: 0, counts: [] },
     3: { events: 0, jbs: 0, counts: [] },
@@ -142,48 +145,43 @@ function buildReport(activities, targetMonth, targetYear) {
   };
 
   for (const a of activities) {
-    const w = weeks[a.week];
+    const w = weekBuckets[a.week];
     if (a.activityType === "jailbreak") { totalJbs++; w.jbs++; }
     else                                { totalEvents++; w.events++; }
-
     if (a.highestCount !== null) {
       allCounts.push(a.highestCount);
       w.counts.push(a.highestCount);
     }
   }
 
-  // Week date ranges relative to period start (27th of prev month)
-  const periodStart = new Date(Date.UTC(targetYear, targetMonth - 2, 27));
-  const weekLabel = (n) => {
+  // Build week metadata (label + date range)
+  const weeks = [1, 2, 3, 4].map((n) => {
     const startOffset = (n - 1) * 7;
     const s = new Date(periodStart.getTime() + startOffset * 86400000);
     const e = n === 4
       ? new Date(Date.UTC(targetYear, targetMonth - 1, 26))
       : new Date(periodStart.getTime() + (startOffset + 6) * 86400000);
-    const fmt = (d) => `${d.getUTCDate()}/${d.getUTCMonth() + 1}`;
-    return `${ordinal(n)} week (${fmt(s)} → ${fmt(e)})`;
-  };
+    const fmtShort = (d) => `${d.getUTCDate()}/${d.getUTCMonth() + 1}`;
+    const w = weekBuckets[n];
+    return {
+      label:      `${ordinal(n)} week`,
+      range:      `${fmtShort(s)} → ${fmtShort(e)}`,
+      events:     w.events,
+      jbs:        w.jbs,
+      avgMembers: avg(w.counts),
+    };
+  });
 
-  const weekBlock = (n) => {
-    const w = weeks[n];
-    return (
-      `**${weekLabel(n)} :**\n` +
-      `Events : ${w.events}\n` +
-      `Jbs : ${w.jbs}\n` +
-      `Average highest member count: ${avg(w.counts)}`
-    );
+  return {
+    monthName,
+    targetYear,
+    periodStartStr: fmt(periodStart),
+    periodEndStr:   fmt(periodEnd),
+    totalEvents,
+    totalJbs,
+    avgMembers: avg(allCounts),
+    weeks,
   };
-
-  return (
-    `**Total month activity ${monthName} ${targetYear} :**\n\n` +
-    `TOTAL Events : ${totalEvents}\n` +
-    `TOTAL Jbs : ${totalJbs}\n` +
-    `AVERAGE Highest member count: ${avg(allCounts)}\n\n` +
-    weekBlock(1) + "\n\n" +
-    weekBlock(2) + "\n\n" +
-    weekBlock(3) + "\n\n" +
-    weekBlock(4)
-  );
 }
 
 // ─── Slash command registration ───────────────────────────────────────────────
@@ -247,6 +245,12 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.commandName !== "monthly-report") return;
   if (interaction.guildId !== MY_GUILD_ID) return;
 
+  // Only allow the command from the report channel
+  if (REPORT_CHANNEL_ID && interaction.channelId !== REPORT_CHANNEL_ID) {
+    await interaction.reply({ content: "You don't have permission ya miboun", ephemeral: true });
+    return;
+  }
+
   const now           = new Date();
   const targetMonth   = interaction.options.getInteger("month") ?? (now.getMonth() + 1);
   const targetYear    = interaction.options.getInteger("year")  ?? now.getFullYear();
@@ -271,20 +275,22 @@ client.on("interactionCreate", async (interaction) => {
       return;
     }
 
-    const activities = await fetchAllMonthMessages(channel, targetMonth, targetYear);
-    const report     = buildReport(activities, targetMonth, targetYear);
+    const activities  = await fetchAllMonthMessages(channel, targetMonth, targetYear);
+    const reportData  = buildReport(activities, targetMonth, targetYear);
+    const imageBuffer = await generateReportImage(reportData);
+    const attachment  = new AttachmentBuilder(imageBuffer, { name: "report.png" });
 
     // Post to the dedicated report channel if configured, otherwise reply inline
     if (REPORT_CHANNEL_ID) {
       const reportChannel = await client.channels.fetch(REPORT_CHANNEL_ID);
       if (reportChannel?.isTextBased()) {
-        await reportChannel.send(report);
+        await reportChannel.send({ files: [attachment] });
         await interaction.editReply(`Report posted in <#${REPORT_CHANNEL_ID}> ✅`);
       } else {
-        await interaction.editReply(report);
+        await interaction.editReply({ files: [attachment] });
       }
     } else {
-      await interaction.editReply(report);
+      await interaction.editReply({ files: [attachment] });
     }
 
     console.log(`Report for ${targetMonth}/${targetYear} sent.`);
