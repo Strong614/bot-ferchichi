@@ -38,9 +38,9 @@ function ordinal(n) {
   return ["1st", "2nd", "3rd", "4th"][n - 1];
 }
 
-function avg(arr) {
+function highest(arr) {
   if (arr.length === 0) return "N/A";
-  return String(Math.round(arr.reduce((s, v) => s + v, 0) / arr.length));
+  return String(Math.max(...arr));
 }
 
 // ─── Embed parser ─────────────────────────────────────────────────────────────
@@ -169,7 +169,7 @@ function buildReport(activities, targetMonth, targetYear) {
       range:      `${fmtShort(s)} → ${fmtShort(e)}`,
       events:     w.events,
       jbs:        w.jbs,
-      avgMembers: avg(w.counts),
+      avgMembers: highest(w.counts),
     };
   });
 
@@ -180,7 +180,7 @@ function buildReport(activities, targetMonth, targetYear) {
     periodEndStr:   fmt(periodEnd),
     totalEvents,
     totalJbs,
-    avgMembers: avg(allCounts),
+    avgMembers: highest(allCounts),
     weeks,
   };
 }

@@ -101,7 +101,7 @@ export async function generateReportImage({
   const statCards = [
     { label: "TOTAL EVENTS", value: totalEvents, color: "#3498db" },
     { label: "TOTAL JBs",    value: totalJbs,    color: "#e74c3c" },
-    { label: "AVG MEMBERS",  value: avgMembers,  color: "#2ecc71" },
+    { label: "HIGHEST MEMBERS",  value: avgMembers,  color: "#2ecc71" },
   ];
 
   const cW  = 440;
@@ -204,7 +204,7 @@ export async function generateReportImage({
     // Avg members
     ctx.fillStyle = "rgba(255,255,255,0.50)";
     ctx.font      = F.regular(24);
-    ctx.fillText("Avg Members", x + wW / 2, wY + wH - 68);
+    ctx.fillText("Highest Members", x + wW / 2, wY + wH - 68);
 
     ctx.fillStyle = "#2ecc71";
     ctx.font      = F.number(36);
