@@ -40,7 +40,7 @@ function ordinal(n) {
 
 function avg(arr) {
   if (arr.length === 0) return "N/A";
-  return (arr.reduce((s, v) => s + v, 0) / arr.length).toFixed(1);
+  return String(Math.round(arr.reduce((s, v) => s + v, 0) / arr.length));
 }
 
 // ─── Embed parser ─────────────────────────────────────────────────────────────
@@ -62,11 +62,12 @@ function parseEmbed(embed, msgDate, periodStart) {
     ? "jailbreak"
     : "event";
 
-  // ── Optional members count ──
-  const countField = embed.fields?.find((f) =>
-    f.name.toLowerCase().includes("members count")
+  // ── Members count from "📄 Description" field → "Members: 9" ──
+  const descField = embed.fields?.find((f) =>
+    f.name.toLowerCase().includes("description")
   );
-  const highestCount = countField ? parseInt(countField.value, 10) : null;
+  const membersMatch = descField?.value.match(/members\s*:\s*(\d+)/i);
+  const highestCount = membersMatch ? parseInt(membersMatch[1], 10) : null;
 
   return {
     activityType,
